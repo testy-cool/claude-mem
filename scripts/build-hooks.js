@@ -27,6 +27,11 @@ const CONTEXT_GENERATOR = {
   source: 'src/services/context-generator.ts'
 };
 
+const WORKER_WRAPPER = {
+  name: 'worker-wrapper',
+  source: 'src/cli/worker-wrapper.ts'
+};
+
 async function buildHooks() {
   console.log('🔨 Building claude-mem hooks and worker service...\n');
 
@@ -151,11 +156,37 @@ async function buildHooks() {
     const contextGenStats = fs.statSync(`${hooksDir}/${CONTEXT_GENERATOR.name}.cjs`);
     console.log(`✓ context-generator built (${(contextGenStats.size / 1024).toFixed(2)} KB)`);
 
-    console.log('\n✅ Worker service, MCP server, and context generator built successfully!');
+    // Build worker wrapper (Windows process management with windowsHide)
+    console.log(`\n🔧 Building worker wrapper...`);
+    await build({
+      entryPoints: [WORKER_WRAPPER.source],
+      bundle: true,
+      platform: 'node',
+      target: 'node18',
+      format: 'cjs',
+      outfile: `${hooksDir}/${WORKER_WRAPPER.name}.cjs`,
+      minify: true,
+      logLevel: 'error',
+      external: ['bun:sqlite'],
+      define: {
+        '__DEFAULT_PACKAGE_VERSION__': `"${version}"`
+      },
+      banner: {
+        js: '#!/usr/bin/env bun'
+      }
+    });
+
+    // Make worker wrapper executable
+    fs.chmodSync(`${hooksDir}/${WORKER_WRAPPER.name}.cjs`, 0o755);
+    const wrapperStats = fs.statSync(`${hooksDir}/${WORKER_WRAPPER.name}.cjs`);
+    console.log(`✓ worker-wrapper built (${(wrapperStats.size / 1024).toFixed(2)} KB)`);
+
+    console.log('\n✅ Worker service, MCP server, context generator, and worker wrapper built successfully!');
     console.log(`   Output: ${hooksDir}/`);
     console.log(`   - Worker: worker-service.cjs`);
     console.log(`   - MCP Server: mcp-server.cjs`);
     console.log(`   - Context Generator: context-generator.cjs`);
+    console.log(`   - Worker Wrapper: worker-wrapper.cjs (Windows)`);
 
   } catch (error) {
     console.error('\n❌ Build failed:', error.message);
