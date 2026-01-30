@@ -50,36 +50,44 @@ function usePaginationFor(endpoint: string, dataType: DataType, currentFilter: s
     }
 
     setState(prev => ({ ...prev, isLoading: true }));
+    stateRef.current = { ...stateRef.current, isLoading: true };
 
-    // Build query params using current offset from ref
-    const params = new URLSearchParams({
-      offset: offsetRef.current.toString(),
-      limit: UI.PAGINATION_PAGE_SIZE.toString()
-    });
+    try {
+      // Build query params using current offset from ref
+      const params = new URLSearchParams({
+        offset: offsetRef.current.toString(),
+        limit: UI.PAGINATION_PAGE_SIZE.toString()
+      });
 
-    // Add project filter if present
-    if (currentFilter) {
-      params.append('project', currentFilter);
+      // Add project filter if present
+      if (currentFilter) {
+        params.append('project', currentFilter);
+      }
+
+      const response = await fetch(`${endpoint}?${params}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load ${dataType}: ${response.statusText}`);
+      }
+
+      const data = await response.json() as { items: DataItem[], hasMore: boolean };
+
+      const newState = { isLoading: false, hasMore: data.hasMore };
+      setState(newState);
+      stateRef.current = newState;
+
+      // Increment offset after successful load
+      offsetRef.current += UI.PAGINATION_PAGE_SIZE;
+
+      return data.items;
+    } catch (error) {
+      // Reset loading state on error to prevent infinite "Loading more..."
+      const errorState = { isLoading: false, hasMore: false };
+      setState(errorState);
+      stateRef.current = errorState;
+      console.error(`[usePagination] Failed to load ${dataType}:`, error);
+      return [];
     }
-
-    const response = await fetch(`${endpoint}?${params}`);
-
-    if (!response.ok) {
-      throw new Error(`Failed to load ${dataType}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as { items: DataItem[], hasMore: boolean };
-
-    setState(prev => ({
-      ...prev,
-      isLoading: false,
-      hasMore: data.hasMore
-    }));
-
-    // Increment offset after successful load
-    offsetRef.current += UI.PAGINATION_PAGE_SIZE;
-
-    return data.items;
   }, [currentFilter, endpoint, dataType]);
 
   return {
